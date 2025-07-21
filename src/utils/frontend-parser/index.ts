@@ -8,6 +8,7 @@
 import JSZip from 'jszip';
 import { parseString } from 'xml2js';
 import { smartTextParse } from '@/utils/text-to-mindmap';
+import { parseMarkdownToMindMap } from '@/utils/text-to-mindmap/markdown-parser';
 import type { MindElixirData, MindElixirNode } from '@/utils/text-to-mindmap';
 
 // PDF.js动态导入，避免SSR问题
@@ -50,16 +51,75 @@ export interface ParseResult {
 
 /**
  * 检查文件类型是否支持前端解析
- * 只支持PPTX文件的直接前端解析
+ * 支持PPTX和Markdown文件的直接前端解析
  * PDF和DOCX文件需要先判断树结构，不在此列表中
  */
 export function isSupportedForFrontendParsing(file: File): boolean {
   const supportedTypes = [
     'application/vnd.openxmlformats-officedocument.presentationml.presentation', // PPTX
-    'application/vnd.ms-powerpoint' // PPT (部分支持)
-    // 注意：PDF和DOCX文件不在此列表中，因为需要先判断树结构
+    'application/vnd.ms-powerpoint', // PPT (部分支持)
+    'text/markdown', // Markdown
+    'text/x-markdown' // Markdown (alternative MIME type)
   ];
-  return supportedTypes.includes(file.type);
+
+  // 也检查文件扩展名，因为有些浏览器可能不正确识别Markdown的MIME类型
+  const fileName = file.name.toLowerCase();
+  const isMarkdownByExtension = fileName.endsWith('.md') || fileName.endsWith('.markdown');
+
+  return supportedTypes.includes(file.type) || isMarkdownByExtension;
+}
+
+/**
+ * 解析Markdown文件
+ * 直接读取文本内容并使用专用Markdown解析器
+ */
+export async function parseMarkdownFile(file: File): Promise<ParseResult> {
+  const startTime = Date.now();
+
+  try {
+    console.log('开始解析Markdown文件:', file.name);
+
+    // 读取文件内容
+    const text = await file.text();
+
+    if (!text || text.trim().length === 0) {
+      return {
+        success: false,
+        error: 'Markdown文件内容为空',
+        metadata: {
+          processingTime: Date.now() - startTime
+        }
+      };
+    }
+
+    console.log('Markdown文件内容长度:', text.length);
+    console.log('Markdown文件前200字符:', text.substring(0, 200));
+
+    // 使用专用的Markdown解析器
+    const mindMapData = parseMarkdownToMindMap(text);
+
+    const processingTime = Date.now() - startTime;
+    console.log(`Markdown解析完成，耗时: ${processingTime}ms`);
+
+    return {
+      success: true,
+      data: mindMapData,
+      metadata: {
+        extractedText: text,
+        processingTime
+      }
+    };
+
+  } catch (error) {
+    console.error('Markdown解析失败:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Markdown文件解析失败',
+      metadata: {
+        processingTime: Date.now() - startTime
+      }
+    };
+  }
 }
 
 /**
@@ -592,11 +652,22 @@ export async function parseFrontendFile(file: File): Promise<ParseResult> {
     };
   }
 
+  // 检查文件扩展名以处理Markdown文件
+  const fileName = file.name.toLowerCase();
+  const isMarkdown = file.type === 'text/markdown' ||
+                    file.type === 'text/x-markdown' ||
+                    fileName.endsWith('.md') ||
+                    fileName.endsWith('.markdown');
+
+  if (isMarkdown) {
+    return await parseMarkdownFile(file);
+  }
+
   switch (file.type) {
     case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
     case 'application/vnd.ms-powerpoint':
       return await parsePPTXFile(file);
-      
+
     case 'application/pdf':
       return await parsePDFFile(file);
 
