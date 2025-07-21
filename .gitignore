@@ -1,0 +1,7 @@
+node_modules
+.env.local
+.env
+# Next.js
+.next/
+# 如果你在本地用 `next export` 生成静态站点，也加上：
+out/

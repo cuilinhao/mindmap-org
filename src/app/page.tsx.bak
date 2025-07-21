@@ -1,0 +1,700 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { MindElixirViewer } from '@/components/mindmap/MindElixirViewer';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { HeroSection } from '@/components/home/HeroSection';
+import { FeaturesSection } from '@/components/home/FeaturesSection';
+import { FAQSection } from '@/components/home/FAQSection';
+import { useLanguage } from '@/lib/i18n/LanguageContext';
+import {
+  Upload,
+  FileText,
+  Brain,
+  Zap,
+  AlertCircle,
+  CheckCircle,
+  Loader2
+} from 'lucide-react';
+import type { InputMode, ProcessingStatus } from '@/lib/types';
+import { textConfig, fileTypeConfig } from '@/lib/config/app';
+import { parseFrontendFile, isSupportedForFrontendParsing } from '@/utils/frontend-parser';
+
+import type { MindElixirData } from '@/utils/text-to-mindmap';
+
+type MindMapData = MindElixirData;
+
+export default function HomePage() {
+  const { t } = useLanguage();
+  const [activeTab, setActiveTab] = useState<InputMode>('text_input');
+  const [textInput, setTextInput] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>('idle');
+  const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isGlobalDragOver, setIsGlobalDragOver] = useState(false);
+  const [mindMapData, setMindMapData] = useState<MindMapData | null>(null);
+
+  // 定义 validateAndSetFile 函数
+  const validateAndSetFile = useCallback((file: File) => {
+    // 验证文件类型
+    if (!fileTypeConfig.acceptedMimeTypes.includes(file.type)) {
+      setError(t('main.errorUnsupportedFile'));
+      return false;
+    }
+
+    // 验证文件大小
+    if (file.size > fileTypeConfig.maxSize) {
+      setError(t('main.errorFileTooLarge').replace('{maxSize}', (fileTypeConfig.maxSize / (1024 * 1024)).toString()));
+      return false;
+    }
+
+    setSelectedFile(file);
+    setError(null);
+    return true;
+  }, [setError, setSelectedFile, t]);
+
+  // 全局拖拽事件监听
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const handleGlobalDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter++;
+
+      // 检查是否包含文件
+      if (e.dataTransfer?.types.includes('Files')) {
+        setIsGlobalDragOver(true);
+        // 如果当前不在文件上传tab，自动切换
+        if (activeTab !== 'file_upload') {
+          setActiveTab('file_upload');
+        }
+      }
+    };
+
+    const handleGlobalDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+
+    const handleGlobalDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter--;
+
+      if (dragCounter === 0) {
+        setIsGlobalDragOver(false);
+      }
+    };
+
+    const handleGlobalDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsGlobalDragOver(false);
+
+      // 检查是否包含文件
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        // 确保切换到文件上传tab
+        setActiveTab('file_upload');
+        // 处理文件
+        validateAndSetFile(e.dataTransfer.files[0]);
+      }
+    };
+
+    // 添加全局事件监听
+    document.addEventListener('dragenter', handleGlobalDragEnter);
+    document.addEventListener('dragover', handleGlobalDragOver);
+    document.addEventListener('dragleave', handleGlobalDragLeave);
+    document.addEventListener('drop', handleGlobalDrop);
+
+    // 清理事件监听
+    return () => {
+      document.removeEventListener('dragenter', handleGlobalDragEnter);
+      document.removeEventListener('dragover', handleGlobalDragOver);
+      document.removeEventListener('dragleave', handleGlobalDragLeave);
+      document.removeEventListener('drop', handleGlobalDrop);
+    };
+  }, [activeTab, validateAndSetFile]);
+
+    setSelectedFile(file);
+    setError(null);
+    return true;
+  }, [setError, setSelectedFile, t]);
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    validateAndSetFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      validateAndSetFile(files[0]);
+    }
+  };
+
+  const handleTextSubmit = async () => {
+    if (!textInput.trim()) {
+      setError(t('main.errorNoText'));
+      return;
+    }
+
+    if (textInput.length > textConfig.maxLength) {
+      setError(t('main.errorTextTooLong').replace('{maxLength}', textConfig.maxLength.toString()));
+      return;
+    }
+
+    await processMindMap('text_input', textInput);
+  };
+
+  const handleFileSubmit = async () => {
+    if (!selectedFile) {
+      setError(t('main.errorNoFile'));
+      return;
+    }
+
+    await processMindMap('file_upload', selectedFile);
+  };
+
+  const processMindMap = async (type: InputMode, content: string | File) => {
+    setError(null);
+    setProcessingStatus('uploading');
+    setProgress(0);
+    setMindMapData(null); // 清除之前的思维导图
+
+    // 模拟步骤进度显示
+    const updateProgress = (step: string, progress: number) => {
+      setStatusMessage(step);
+      setProgress(progress);
+    };
+
+    try {
+      updateProgress(t('main.preparing'), 10);
+      setProcessingStatus('uploading');
+
+      // 判断文本是否是树结构的函数
+      const isTreeStructure = (text: string): boolean => {
+        const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+
+        // 检查是否有缩进或层级结构
+        const hasIndentation = lines.some(line => /^\s+/.test(line));
+
+        // 检查是否有列表标记
+        const hasListMarkers = lines.some(line => /^(\s*)[-•*+]\s/.test(line));
+
+        // 检查是否有编号列表
+        const hasNumberedList = lines.some(line => /^(\s*)\d+[\.\)]\s/.test(line));
+
+        // 检查是否有Markdown标题格式（# 标题、## 子标题等）
+        const hasMarkdownHeadings = lines.some(line => /^#{1,6}\s+.+/.test(line));
+
+        // 检查是否有明显的章节标题
+        const hasChapterTitles = lines.some(line =>
+          /^第[一二三四五六七八九十\d]+[章节]/.test(line) ||
+          /^[一二三四五六七八九十]+[、\s]/.test(line) ||
+          /^\d+\.\d+/.test(line) ||
+          /^Chapter\s+\d+/i.test(line) ||
+          /^Section\s+\d+/i.test(line)
+        );
+
+        console.log('文本结构分析:', {
+          hasIndentation,
+          hasListMarkers,
+          hasNumberedList,
+          hasMarkdownHeadings,
+          hasChapterTitles
+        });
+
+        // 如果有以上任一特征，认为是树结构
+        return hasIndentation || hasListMarkers || hasNumberedList || hasChapterTitles || hasMarkdownHeadings;
+      };
+
+      // 处理文本内容的函数（无论是直接输入还是从文件中提取）
+      const processTextContent = async (textContent: string, source: string): Promise<boolean> => {
+        if (isTreeStructure(textContent)) {
+          console.log(`检测到${source}内容是树结构，使用前端解析`);
+
+          updateProgress(t('main.parsing'), 30);
+          setProcessingStatus('processing');
+
+          // 检查是否是Markdown格式
+          const isMarkdown = textContent.split('\n')
+            .some(line => /^#{1,6}\s+.+/.test(line.trim()));
+
+          let mindMapData;
+
+          if (isMarkdown) {
+            console.log('检测到Markdown格式，使用专用Markdown解析器');
+            // 导入Markdown解析器
+            const { parseMarkdownToMindMap } = await import('@/utils/text-to-mindmap/markdown-parser');
+            // 使用Markdown解析器处理文本
+            mindMapData = parseMarkdownToMindMap(textContent);
+          } else {
+            // 导入智能文本解析函数
+            const { smartTextParse } = await import('@/utils/text-to-mindmap');
+            // 使用通用解析器处理文本
+            mindMapData = smartTextParse(textContent);
+          }
+
+          updateProgress(t('main.generating'), 80);
+          setProcessingStatus('generating');
+
+          // 等待一小段时间，让用户感知到处理过程
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          updateProgress(t('main.completed'), 100);
+          setProcessingStatus('completed');
+          setStatusMessage(t('main.completed'));
+
+          setMindMapData(mindMapData);
+          console.log('前端解析生成的思维导图数据:', mindMapData);
+
+          return true; // 处理成功
+        }
+
+        return false; // 需要API处理
+      };
+
+      // 判断是否需要前端解析
+      if (type === 'file_upload') {
+        const file = content as File;
+
+        // 检查是否支持前端解析（PPTX）
+        if (isSupportedForFrontendParsing(file)) {
+          console.log('使用前端解析:', file.name, file.type);
+
+          updateProgress(t('main.parsing'), 30);
+          setProcessingStatus('processing');
+
+          // 前端解析文件
+          const parseResult = await parseFrontendFile(file);
+
+          if (!parseResult.success) {
+            throw new Error(parseResult.error || '文件解析失败');
+          }
+
+          updateProgress(t('main.generating'), 80);
+          setProcessingStatus('generating');
+
+          // 直接使用解析结果
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+          updateProgress(t('main.completed'), 100);
+          setProcessingStatus('completed');
+          setStatusMessage(t('main.completed'));
+
+          setMindMapData(parseResult.data!);
+          console.log('前端解析生成的思维导图数据:', parseResult.data);
+
+          return;
+        }
+
+        // 检查是否是可以读取文本内容的文件类型
+        const textBasedFileTypes = [
+          'text/plain',                                                   // TXT
+          'application/pdf',                                              // PDF
+          'application/msword',                                           // DOC
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // DOCX
+        ];
+
+        if (textBasedFileTypes.includes(file.type)) {
+          console.log(`检测到${file.type}文件，尝试前端解析`);
+
+          updateProgress(t('main.readingFile'), 20);
+
+          try {
+            let textContent = '';
+
+            // 根据文件类型选择不同的读取方法
+            if (file.type === 'text/plain') {
+              // 直接读取TXT文件内容
+              textContent = await file.text();
+            } else if (file.type === 'application/pdf') {
+              // 使用PDF.js读取PDF文件内容
+              try {
+                // 动态导入PDF.js
+                const pdfjs = await import('pdfjs-dist');
+
+                // 设置worker
+                pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+
+                // 读取文件为ArrayBuffer
+                const arrayBuffer = await file.arrayBuffer();
+
+                // 加载PDF文档
+                const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+                const totalPages = pdf.numPages;
+
+                console.log(`PDF共有 ${totalPages} 页`);
+
+                // 提取所有页面的文本
+                let fullText = '';
+
+                for (let pageNum = 1; pageNum <= Math.min(totalPages, 20); pageNum++) {
+                  try {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+
+                    // 拼接页面文本
+                    const pageText = textContent.items
+                      .filter((item: { str?: string }) => item.str && item.str.trim())
+                      .map((item: { str: string }) => item.str)
+                      .join(' ');
+
+                    fullText += pageText + '\n\n';
+
+                    console.log(`解析完成第 ${pageNum} 页`);
+                  } catch (error) {
+                    console.warn(`解析第 ${pageNum} 页失败:`, error);
+                  }
+                }
+
+                textContent = fullText;
+              } catch (error) {
+                console.error('PDF解析失败:', error);
+                throw new Error('PDF解析失败');
+              }
+            } else if (file.type.includes('word')) {
+              // 对于DOC/DOCX文件，尝试使用文件读取API
+              // 注意：浏览器无法直接读取DOC/DOCX文件内容，这里只是尝试读取可能的文本内容
+              try {
+                // 读取为ArrayBuffer
+                const arrayBuffer = await file.arrayBuffer();
+
+                // 尝试将ArrayBuffer转换为文本
+                // 这种方法对于DOCX可能不完全有效，但可以尝试提取一些文本内容
+                const decoder = new TextDecoder('utf-8');
+                const rawText = decoder.decode(arrayBuffer);
+
+                // 清理文本，移除二进制内容
+                textContent = rawText.replace(/[^\x20-\x7E\n\r\t\u4e00-\u9fa5]/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+
+                // 如果提取的文本太短，可能解析失败
+                if (textContent.length < 100) {
+                  throw new Error('无法提取足够的文本内容');
+                }
+              } catch (error) {
+                console.error('Word文档解析失败:', error);
+                throw new Error('Word文档解析失败');
+              }
+            }
+
+            // 处理提取的文本内容
+            if (textContent && textContent.length > 0) {
+              const processed = await processTextContent(textContent, file.type);
+              if (processed) {
+                return; // 如果成功处理，直接返回
+              }
+            }
+
+            console.log(`${file.type}文件内容不是树结构或提取失败，使用API处理`);
+          } catch (err) {
+            console.error(`读取${file.type}文件失败:`, err);
+            // 如果读取失败，继续使用API处理
+          }
+        }
+      } else if (type === 'text_input') {
+        // 处理直接输入的文本
+        const textContent = content as string;
+        const processed = await processTextContent(textContent, '文本输入');
+        if (processed) {
+          return; // 如果成功处理，直接返回
+        }
+      }
+
+      // 其他文件类型或非树结构文本，使用后端API处理
+      console.log('使用后端API处理');
+
+      // 创建FormData
+      const formData = new FormData();
+      formData.append('type', type);
+
+      if (type === 'file_upload') {
+        formData.append('file', content as File);
+        formData.append('title', (content as File).name.replace(/\.[^/.]+$/, ''));
+      } else {
+        formData.append('content', content as string);
+        formData.append('title', '手动输入的文档');
+      }
+
+      updateProgress(t('main.uploading'), 20);
+
+      // 调用API
+      const response = await fetch('/api/mindmap/generate', {
+        method: 'POST',
+        body: formData
+      });
+
+      updateProgress(t('main.processing'), 50);
+      setProcessingStatus('processing');
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error?.message || 'API调用失败');
+      }
+
+      updateProgress(t('main.generating'), 90);
+      setProcessingStatus('generating');
+
+      // 模拟最后的处理时间
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      updateProgress(t('main.completed'), 100);
+      setProcessingStatus('completed');
+      setStatusMessage(t('main.completed'));
+
+      // 设置思维导图数据，在右侧显示
+      setMindMapData(result.data);
+      console.log('后端API生成的思维导图数据:', result.data);
+
+    } catch (err) {
+      console.error('处理失败:', err);
+      setError(err instanceof Error ? err.message : '处理失败，请重试');
+      setProcessingStatus('error');
+    }
+  };
+
+  const resetForm = () => {
+    setProcessingStatus('idle');
+    setProgress(0);
+    setStatusMessage('');
+    setTextInput('');
+    setSelectedFile(null);
+    setError(null);
+    setMindMapData(null);
+  };
+
+  const isProcessing = processingStatus !== 'idle' && processingStatus !== 'completed' && processingStatus !== 'error';
+
+  return (
+    <MainLayout>
+      {/* 全局拖拽覆盖层 */}
+      {isGlobalDragOver && activeTab === 'text_input' && (
+        <div className="fixed inset-0 bg-blue-500/30 backdrop-blur-md z-50 flex items-center justify-center">
+          <div className="bg-black/80 border border-white/10 rounded-xl p-8 shadow-2xl text-center max-w-md mx-4 backdrop-blur-lg">
+            <Upload className="h-16 w-16 text-blue-400 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-white mb-2">{t('main.fileDropActive')}</h3>
+            <p className="text-gray-300 mb-4">
+              {t('main.fileDragDetected')}
+            </p>
+            <p className="text-sm text-gray-400">
+              {t('main.fileSupport')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Hero Section */}
+      <HeroSection />
+
+      {/* 主内容区 */}
+      <div id="main-content" className="relative py-24 overflow-hidden bg-black text-white">
+        {/* 背景网格 */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:40px_40px]"></div>
+
+        {/* 渐变光晕 */}
+        <div className="absolute top-0 left-1/3 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20"></div>
+        <div className="absolute bottom-0 right-1/3 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20"></div>
+
+        <div className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-5xl mx-auto">
+            {/* 输入区域 */}
+            <Card className="w-full shadow-xl border-0 bg-white/5 backdrop-blur-md border border-white/10">
+              <CardHeader className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-b border-white/10">
+                <CardTitle className="text-2xl text-white">{t('main.title')}</CardTitle>
+                <CardDescription className="text-gray-300">
+                  {t('main.description')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6 p-6">
+                <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as InputMode)}>
+                  <TabsList className="grid w-full grid-cols-2 bg-white/10">
+                    <TabsTrigger value="text_input" className="data-[state=active]:bg-white/20 data-[state=active]:text-white text-gray-300">{t('main.textTab')}</TabsTrigger>
+                    <TabsTrigger value="file_upload" className="data-[state=active]:bg-white/20 data-[state=active]:text-white text-gray-300">{t('main.fileTab')}</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="text_input" className="space-y-4 pt-4">
+                    <Textarea
+                      placeholder={t('main.textPlaceholder')}
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      className="min-h-[200px] resize-none bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500 focus:ring-blue-500"
+                      disabled={isProcessing}
+                    />
+                    <div className="flex justify-between items-center text-sm text-gray-400">
+                      <span>{textInput.length} / {textConfig.maxLength} {t('main.charCount')}</span>
+                      <span>{t('main.langSupport')}</span>
+                    </div>
+                    <Button
+                      onClick={handleTextSubmit}
+                      className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0"
+                      disabled={isProcessing || !textInput.trim()}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {t('main.processingButton')}
+                        </>
+                      ) : (
+                        t('main.generateButton')
+                      )}
+                    </Button>
+                  </TabsContent>
+
+                  <TabsContent value="file_upload" className="space-y-4 pt-4">
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${isDragOver || isGlobalDragOver ? 'border-blue-400 bg-blue-500/10' : 'border-white/20 hover:border-white/40'
+                        } ${selectedFile ? 'border-green-400 bg-green-500/10' : ''}`}
+                      onClick={() => document.getElementById('file-upload')?.click()}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
+                      <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <div className="space-y-2">
+                        <p className="text-lg font-medium text-white">
+                          {selectedFile ? `${t('main.fileSelected')}${selectedFile.name}` :
+                            (isDragOver || isGlobalDragOver) ? t('main.fileDropActive') : t('main.fileDropText')}
+                        </p>
+                        <p className="text-sm text-gray-400">
+                          {t('main.fileSupport')}
+                        </p>
+                        {isGlobalDragOver && (
+                          <p className="text-sm text-blue-400 font-medium">
+                            {t('main.fileDragDetected')}
+                          </p>
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        onChange={handleFileSelect}
+                        accept=".txt,.pdf,.docx,.doc,.pptx,.ppt"
+                        className="hidden"
+                        id="file-upload"
+                        disabled={isProcessing}
+                      />
+                    </div>
+                    {selectedFile && (
+                      <Button
+                        onClick={() => setSelectedFile(null)}
+                        variant="outline"
+                        className="w-full mb-2 bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-500/50 text-blue-300 hover:bg-blue-500/30 hover:text-white"
+                        disabled={isProcessing}
+                      >
+                        {t('main.selectFileAgain')}
+                      </Button>
+                    )}
+                    <Button
+                      onClick={handleFileSubmit}
+                      className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0"
+                      disabled={isProcessing || !selectedFile}
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {t('main.processingButton')}
+                        </>
+                      ) : (
+                        t('main.uploadButton')
+                      )}
+                    </Button>
+                  </TabsContent>
+                </Tabs>
+
+                {/* 处理状态显示 */}
+                {isProcessing && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-300">{statusMessage}</span>
+                      <span className="text-sm text-gray-400">{progress}%</span>
+                    </div>
+                    <Progress value={progress} className="w-full bg-white/10" indicatorClassName="bg-gradient-to-r from-blue-500 to-purple-500" />
+                  </div>
+                )}
+
+                {/* 错误信息显示 */}
+                {error && (
+                  <Alert className="border-red-500/20 bg-red-500/10 text-red-300">
+                    <AlertCircle className="h-4 w-4 text-red-400" />
+                    <AlertDescription className="text-red-300">
+                      {error}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* 成功信息显示 */}
+                {processingStatus === 'completed' && !error && (
+                  <Alert className="border-green-500/20 bg-green-500/10 text-green-300">
+                    <CheckCircle className="h-4 w-4 text-green-400" />
+                    <AlertDescription className="text-green-300">
+                      {statusMessage}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* 重置按钮 */}
+                {(processingStatus === 'completed' || processingStatus === 'error') && (
+                  <Button
+                    onClick={resetForm}
+                    variant="outline"
+                    className="w-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-blue-500/50 text-blue-300 hover:bg-blue-500/30 hover:text-white"
+                  >
+                    {t('main.resetButton')}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* 思维导图展示区 */}
+            {mindMapData && (
+              <div className="mt-12">
+                <Card className="border-0 shadow-xl overflow-hidden bg-white/5 backdrop-blur-md border border-white/10">
+                  <CardHeader className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-b border-white/10">
+                    <CardTitle className="text-white">{t('main.resultTitle')}</CardTitle>
+                    <CardDescription className="text-gray-300">
+                      {t('main.resultDescription')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="h-[600px] bg-black/30">
+                      <MindElixirViewer data={mindMapData} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Features Section */}
+      <FeaturesSection />
+
+      {/* FAQ Section */}
+      <FAQSection />
+    </MainLayout>
+  );
+}

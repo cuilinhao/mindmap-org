@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "src/app/api/mindmap/generate/route.ts": {
+      "maxDuration": 60
+    }
+  },
+  "regions": ["hkg1", "sin1", "nrt1"],
+  "framework": "nextjs"
+}

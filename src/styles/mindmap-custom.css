@@ -1,0 +1,194 @@
+/* 自定义思维导图样式 */
+
+/* 确保所有节点都可见 */
+.mind-elixir-custom .node,
+.mind-elixir-custom .map-container .node {
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* 节点文本样式 */
+.mind-elixir-custom .node-box,
+.mind-elixir-custom .map-container .node .node-box {
+  border-radius: 8px;
+  padding: 8px 12px;
+  transition: all 0.3s ease;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 14px;
+  line-height: 1.4;
+  min-width: 60px;
+  text-align: center;
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: inline-block !important;
+}
+
+/* 根节点样式 */
+.mind-elixir-custom .node.root .node-box,
+.mind-elixir-custom .map-container .node.root .node-box {
+  background-color: #2F9BFF;
+  color: white;
+  font-weight: bold;
+  padding: 10px 16px;
+  border-radius: 10px;
+}
+
+/* 叶子节点样式 */
+.mind-elixir-custom .node.leaf-node .node-box,
+.mind-elixir-custom .map-container .node.leaf-node .node-box {
+  background-color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* 调试样式 - 确保所有节点都可见 */
+.mind-elixir-custom * {
+  visibility: visible !important;
+}
+
+.mind-elixir-custom .node * {
+  opacity: 1 !important;
+  display: block !important;
+}
+
+/* 强制显示所有文本 */
+.mind-elixir-custom text,
+.mind-elixir-custom .node text,
+.mind-elixir-custom .node-box {
+  fill: #333 !important;
+  color: #333 !important;
+  font-size: 14px !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* 不同层级的节点颜色 */
+.mind-elixir-custom .map-container .node .node-box.level-1 {
+  background-color: rgba(47, 155, 255, 0.1);
+  border-left: 3px solid #2F9BFF;
+}
+
+.mind-elixir-custom .map-container .node .node-box.level-2 {
+  background-color: rgba(76, 175, 80, 0.1);
+  border-left: 3px solid #4CAF50;
+}
+
+.mind-elixir-custom .map-container .node .node-box.level-3 {
+  background-color: rgba(255, 87, 34, 0.1);
+  border-left: 3px solid #FF5722;
+}
+
+.mind-elixir-custom .map-container .node .node-box.level-4 {
+  background-color: rgba(255, 152, 0, 0.1);
+  border-left: 3px solid #FF9800;
+}
+
+.mind-elixir-custom .map-container .node .node-box.level-5 {
+  background-color: rgba(156, 39, 176, 0.1);
+  border-left: 3px solid #9C27B0;
+}
+
+/* 悬停效果 */
+.mind-elixir-custom .map-container .node .node-box:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+/* 连接线样式 */
+.mind-elixir-custom .map-container .line {
+  stroke-width: 2px;
+}
+
+/* 自定义工具栏已移除 */
+
+/* 原始工具栏样式 - 恢复显示 */
+.mind-elixir-custom .map-container .toolbar,
+.toolbar {
+  opacity: 1 !important; /* 显示原始工具栏 */
+  visibility: visible !important;
+  position: absolute !important;
+  pointer-events: auto !important; /* 启用原始工具栏的交互 */
+}
+
+/* 确保原始工具栏的按钮可见 */
+.mind-elixir-custom .map-container .toolbar > *,
+.toolbar > * {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* 右键菜单样式 */
+.mind-elixir-context-menu {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.mind-elixir-context-menu li {
+  padding: 8px 16px;
+  transition: background-color 0.2s ease;
+}
+
+.mind-elixir-context-menu li:hover {
+  background-color: rgba(47, 155, 255, 0.1);
+}
+
+/* 自定义右键菜单文本 - 中文 */
+html[lang="zh"] .mind-elixir-context-menu li:nth-child(1) {
+  content: "插入子节点";
+}
+
+html[lang="zh"] .mind-elixir-context-menu li:nth-child(2) {
+  content: "插入同级节点";
+}
+
+html[lang="zh"] .mind-elixir-context-menu li:nth-child(3) {
+  content: "专注";
+}
+
+html[lang="zh"] .mind-elixir-context-menu li:nth-child(4) {
+  content: "取消专注";
+}
+
+html[lang="zh"] .mind-elixir-context-menu li:nth-child(5) {
+  content: "摘要";
+}
+
+html[lang="zh"] .mind-elixir-context-menu li:nth-child(6) {
+  content: "连接";
+}
+
+html[lang="zh"] .mind-elixir-context-menu li:nth-child(7) {
+  content: "双向连接";
+}
+
+/* 自定义右键菜单文本 - 英文 */
+html[lang="en"] .mind-elixir-context-menu li:nth-child(1) {
+  content: "Add child";
+}
+
+html[lang="en"] .mind-elixir-context-menu li:nth-child(2) {
+  content: "Add sibling";
+}
+
+html[lang="en"] .mind-elixir-context-menu li:nth-child(3) {
+  content: "Focus";
+}
+
+html[lang="en"] .mind-elixir-context-menu li:nth-child(4) {
+  content: "Cancel focus mode";
+}
+
+html[lang="en"] .mind-elixir-context-menu li:nth-child(5) {
+  content: "Summary";
+}
+
+html[lang="en"] .mind-elixir-context-menu li:nth-child(6) {
+  content: "Link";
+}
+
+html[lang="en"] .mind-elixir-context-menu li:nth-child(7) {
+  content: "Bi-directional link";
+}
