@@ -5,9 +5,18 @@
 
 import type { MindElixirData } from '@/utils/text-to-mindmap';
 
-// Gemini API 配置
-const GEMINI_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const GEMINI_API_KEY = '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';
+// Gemini API 配置 - 从环境变量读取
+const GEMINI_API_URL = process.env.GEMINI_API_URL || 'https://openrouter.ai/api/v1/chat/completions';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// 检查 Gemini 配置
+export const checkGeminiConfig = () => {
+  if (!GEMINI_API_KEY) {
+    console.warn('GEMINI_API_KEY not found, AI features will be disabled');
+    return false;
+  }
+  return true;
+};
 
 // Gemini API 响应接口
 interface GeminiResponse {
@@ -38,18 +47,28 @@ interface GeminiResponse {
  * Gemini 客户端服务
  */
 export class GeminiService {
-  private apiKey: string;
+  private apiKey: string | null;
   private apiUrl: string;
+  private isConfigured: boolean;
 
   constructor() {
-    this.apiKey = GEMINI_API_KEY;
     this.apiUrl = GEMINI_API_URL;
+    this.apiKey = GEMINI_API_KEY || null;
+    this.isConfigured = checkGeminiConfig();
+
+    if (!this.isConfigured) {
+      console.warn('🤖 Gemini Service running without API key (AI features disabled)');
+    }
   }
 
   /**
    * 调用 Gemini API
    */
   private async callAPI(messages: Array<{ role: string; content: string }>): Promise<string> {
+    if (!this.isConfigured || !this.apiKey) {
+      throw new Error('Gemini API is not configured. Please set GEMINI_API_KEY environment variable.');
+    }
+
     try {
       const response = await fetch(this.apiUrl, {
         method: 'POST',
@@ -70,7 +89,7 @@ export class GeminiService {
       }
 
       const data: GeminiResponse = await response.json();
-      
+
       if (!data.choices || data.choices.length === 0) {
         throw new Error('Gemini API returned no choices');
       }
@@ -340,6 +359,11 @@ ${content}`;
    * 测试 Gemini API 连接
    */
   async testConnection(): Promise<boolean> {
+    if (!this.isConfigured) {
+      console.warn('Gemini API not configured');
+      return false;
+    }
+
     try {
       await this.callAPI([
         { role: 'system', content: 'You are a helpful assistant.' },
