@@ -48,6 +48,13 @@ export default function HomePage() {
 
   // 定义 validateAndSetFile 函数
   const validateAndSetFile = useCallback((file: File) => {
+    // 立即清空之前的思维导图和相关状态
+    setMindMapData(null);
+    setError(null);
+    setProcessingStatus('idle');
+    setProgress(0);
+    setStatusMessage('');
+
     // 获取文件扩展名
     const fileExtension = file.name.toLowerCase().split('.').pop();
 
@@ -928,7 +935,12 @@ export default function HomePage() {
               <CardContent className="space-y-6 p-6">
                 <Tabs value={activeTab} onValueChange={(value) => {
                   setActiveTab(value as InputMode);
-                  setError(null); // 清除错误状态
+                  // 切换标签页时清空之前的状态
+                  setError(null);
+                  setMindMapData(null);
+                  setProcessingStatus('idle');
+                  setProgress(0);
+                  setStatusMessage('');
                 }}>
                   <TabsList className="grid w-full grid-cols-2 bg-white/10">
                     <TabsTrigger value="text_input" className="data-[state=active]:bg-white/20 data-[state=active]:text-white text-gray-300">{t('main.textTab')}</TabsTrigger>
@@ -939,7 +951,17 @@ export default function HomePage() {
                     <Textarea
                       placeholder={t('main.textPlaceholder')}
                       value={textInput}
-                      onChange={(e) => setTextInput(e.target.value)}
+                      onChange={(e) => {
+                        setTextInput(e.target.value);
+                        // 当用户开始输入新内容时，清空之前的思维导图
+                        if (mindMapData) {
+                          setMindMapData(null);
+                          setError(null);
+                          setProcessingStatus('idle');
+                          setProgress(0);
+                          setStatusMessage('');
+                        }
+                      }}
                       className="min-h-[200px] resize-none bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-blue-500 focus:ring-blue-500"
                       disabled={isProcessing}
                     />
